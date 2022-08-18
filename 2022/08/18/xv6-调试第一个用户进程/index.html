@@ -1,0 +1,209 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"><meta name="author" content="Wentao An"><link rel="icon" href="/hexo.png"><title>Wentao' Blog</title><meta name="description" content=""><link rel="alternate" type="application/rss+xml" title="Wentao' Blog" href="/atom.xml"><link rel="stylesheet" href="//cdn.bootcss.com/font-awesome/4.5.0/css/font-awesome.min.css"><link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"><link rel="stylesheet" href="/css/main.css"><link rel="stylesheet" href="/css/highlight.css"><link rel="stylesheet" href="//fonts.googleapis.com/css?family=Noto+Sans+SC:500,400,300"><link rel="stylesheet" href="//fonts.googleapis.com/css?family=JetBrains+Mono:500,400,300"><link rel="stylesheet" href="//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800"><!-- hexo injector head_end start -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.12.0/dist/katex.min.css">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/hexo-math@4.0.0/dist/style.css">
+<!-- hexo injector head_end end --><meta name="generator" content="Hexo 6.2.0"><link rel="stylesheet" href="/css/prism-tomorrow.css" type="text/css"></head><body><nav class="navbar navbar-default navbar-fixed-top navbar-custom"><div class="container-fluid"><div class="navbar-header"><button type="button" data-toggle="collapse" data-target="#main-navbar" class="navbar-toggle"><span class="sr-only">Toggle navigation</span><span class="icon-bar"></span><span class="icon-bar"></span><span class="icon-bar"></span></button><a href="/" class="navbar-brand">Wentao' Blog</a></div><div id="main-navbar" class="collapse navbar-collapse"><ul class="nav navbar-nav navbar-right"><li><a href="/archives">Archive</a></li><li><a target="_blank" rel="noopener" href="https://github.com/TimeSea05">Github</a></li><li><a href="/about/">About</a></li></ul></div><div class="avatar-container"><div class="avatar-img-border"><a href="/"><img src="/hexo.png" class="avatar-img"></a></div></div></div></nav><header class="header-section"><div class="intro-header no-img"><div class="container"><div class="row"><div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1"><div class="post-heading"><h1>xv6:调试第一个用户进程</h1><p class="post-meta">Posted on Aug 18 2022</p></div></div></div></div></div></header><div class="container"><div class="row"><div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1"><article role="main" class="blog-post"><p>在配置好调试xv6内核调试的环境之后，便可以开始调试内核代码。</p>
+<p>调试开始时，程序在入口<code>kernel/main.c</code>处挂起。继续进行调试，内核会做一些初始化的工作，随后来到初始化第一个用户进程的函数<code>userinit()</code>：</p>
+<img src="https://s3.bmp.ovh/imgs/2022/08/18/6b573deb9dbd0ec5.png" style="zoom:67%;" />
+
+<p>进入这个函数之后，在<code>kernel/proc.c</code>中，我们可以看到第一个用户进程的代码的二进制形式：</p>
+<pre><code>&#x2F;&#x2F; a user program that calls exec(&quot;&#x2F;init&quot;)
+&#x2F;&#x2F; od -t xC initcode
+uchar initcode[] &#x3D; {
+  0x17, 0x05, 0x00, 0x00, 0x13, 0x05, 0x45, 0x02,
+  0x97, 0x05, 0x00, 0x00, 0x93, 0x85, 0x35, 0x02,
+  0x93, 0x08, 0x70, 0x00, 0x73, 0x00, 0x00, 0x00,
+  0x93, 0x08, 0x20, 0x00, 0x73, 0x00, 0x00, 0x00,
+  0xef, 0xf0, 0x9f, 0xff, 0x2f, 0x69, 0x6e, 0x69,
+  0x74, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00
+};</code></pre>
+
+<p>二进制代码的RISC-V反汇编在<code>initcode.S</code> 中：</p>
+<pre><code># Initial process that execs &#x2F;init.
+# This code runs in user space.
+
+#include &quot;syscall.h&quot;
+
+# exec(init, argv)
+.globl start
+start:
+        la a0, init
+        la a1, argv
+        li a7, SYS_exec
+        ecall
+
+# for(;;) exit();
+exit:
+        li a7, SYS_exit
+        ecall
+        jal exit
+
+# char init[] &#x3D; &quot;&#x2F;init\0&quot;;
+init:
+  .string &quot;&#x2F;init\0&quot;
+
+# char *argv[] &#x3D; { init, 0 };
+.p2align 2
+argv:
+  .long init
+  .long 0</code></pre>
+
+<p>之后退出vscode，使用命令行gdb调试<code>initcode</code> 的汇编代码。在<code>x86-64</code>架构的PC上使用普通的gdb无法正常调试RISCV-64架构的二进制文件<code>kernel</code>，所以我们需要换用RISC-V指令集的调试器。我是用<code>gdb-multiarch</code>调试内核的。不知道为什么，配置文件<code>.gdbinit</code>没有自动加载到gdb中，在我将其中的配置逐一输入到gdb后，开始调试，程序会停在操作系统内核的入口处：</p>
+<pre><code>(gdb) target remote 127.0.0.1:26000
+Remote debugging using 127.0.0.1:26000
+warning: No executable has been specified and target does not support
+determining executable automatically.  Try using the &quot;file&quot; command.
+0x0000000000001000 in ?? ()</code></pre>
+
+
+
+<p>接着我们在地址0处打一个断点(用户进程的第一条指令在其地址空间的0地址处)。执行continue，程序在<code>initcode</code>的第一条指令处挂起。执行<code>si</code>，至<code>ecall</code>指令处：</p>
+<pre><code>Breakpoint 1, 0x0000000000000000 in ?? ()
+&#x3D;&gt; 0x0000000000000000:  17 05 00 00     auipc   a0,0x0
+(gdb) b *0
+Note: breakpoint 1 also set at pc 0x0.
+Breakpoint 2 at 0x0
+(gdb) x&#x2F;10i 0
+&#x3D;&gt; 0x0: auipc   a0,0x0
+   0x4: addi    a0,a0,36
+   0x8: auipc   a1,0x0
+   0xc: addi    a1,a1,35
+   0x10:        li      a7,7
+   0x14:        ecall
+   0x18:        li      a7,2
+   0x1c:        ecall
+   0x20:        jal     ra,0x18
+   0x24:        0x696e692f</code></pre>
+
+<p>在继续执行ecall指令之前，我们需要了解RISC-V的trap机制。下面的内容来自xv6的手册：</p>
+<blockquote>
+<p>Here’s an outline of the most important registers:</p>
+<ul>
+<li><p><strong>stvec</strong>: The kernel writes the address of its trap handler here; the RISC-V jumps to the<br>address in stvec to handle a trap.</p>
+</li>
+<li><p><strong>sepc</strong>: When a trap occurs, RISC-V saves the program counter here (since the pc is then<br>overwritten with the value in stvec). The sret (return from trap) instruction copies sepc<br>to the pc. The kernel can write sepc to control where sret goes.</p>
+</li>
+<li><p><strong>scause</strong>: RISC-V puts a number here that describes the reason for the trap.</p>
+</li>
+<li><p><strong>sscratch</strong>: The kernel places a value here that comes in handy at the very start of a trap<br>handler.</p>
+</li>
+<li><p><strong>sstatus</strong>: The SIE bit in sstatus controls whether device interrupts are enabled. If the<br>kernel clears SIE, the RISC-V will defer device interrupts until the kernel sets SIE. The SPP<br>bit indicates whether a trap came from user mode or supervisor mode, and controls to what<br>mode sret returns.</p>
+</li>
+</ul>
+<p>When it needs to force a trap, the RISC-V hardware does the following for all trap types (other<br>than timer interrupts):</p>
+<ol>
+<li>If the trap is a device interrupt, and the sstatus SIE bit is clear, don’t do any of the<br>following.</li>
+<li>Disable interrupts by clearing the SIE bit in <strong>sstatus</strong></li>
+<li>Copy the <strong>pc</strong> to <strong>sepc</strong>.</li>
+<li>Save the current mode (user or supervisor) in the SPP bit in <strong>sstatus</strong></li>
+<li>Set <strong>scause</strong> to reflect the trap’s cause (ecall: 8)</li>
+<li>Set the mode to supervisor.</li>
+<li>Copy <strong>stvec</strong> to the <strong>pc</strong>.</li>
+</ol>
+</blockquote>
+<p>终端处理程序的入口地址已经存在了<code>stvec</code>寄存器中，在终端输入<code>x $stvec</code>，gdb提示</p>
+<pre><code>0x3ffffff000:        Cannot access memory at address 0x3ffffff000</code></pre>
+
+<p>在<code>qemu</code>中使用<code>info mem</code>查看内存信息：</p>
+<pre><code>(qemu) info mem
+vaddr            paddr            size             attr
+---------------- ---------------- ---------------- -------
+0000000000000000 0000000087f73000 0000000000001000 rwxu-a-
+0000003fffffe000 0000000087f77000 0000000000001000 rw---a-
+0000003ffffff000 0000000080007000 0000000000001000 r-x--a-</code></pre>
+
+<p>虚拟地址对应的<code>0x3ffffff000</code>处的内存的<code>attr</code>中不包含字母u，说明此处内存是用户不可访问的，是操作系统内核中断处理程序的入口处。</p>
+<p>现在我们验证一下手册中关于中断处理的操作系统行为。在执行ecall指令前，打印以下寄存器的信息</p>
+<pre><code>(gdb) x $pc
+&#x3D;&gt; 0x14:        ecall
+(gdb) x $stvec
+   0x3ffffff000:        Cannot access memory at address 0x3ffffff000
+(gdb) x $sepc
+   0x0: auipc   a0,0x0</code></pre>
+
+<p>执行ecall指令后：</p>
+<pre><code>Breakpoint 3, 0x0000003ffffff000 in ?? ()
+&#x3D;&gt; 0x0000003ffffff000:  73 15 05 14     csrrw   a0,sscratch,a0
+(gdb) x $pc
+&#x3D;&gt; 0x3ffffff000:        csrrw   a0,sscratch,a0
+(gdb) x $stvec
+&#x3D;&gt; 0x3ffffff000:        csrrw   a0,sscratch,a0
+(gdb) x $sepc
+   0x14:        Cannot access memory at address 0x14
+(gdb) p $scause
+$2 &#x3D; 8</code></pre>
+
+<p>手册中规定的行为果然被复现了：<code>stvec</code>中的值被拷贝到了<code>pc</code>中，而<code>pc</code>的值被保存到了<code>sepc</code>中。同时<code>scause</code>寄存器的值也被设置成了8. 现在使用gdb tui查看反汇编，可以看到反汇编的内容就是<code>trampoline.S</code>中的汇编代码：</p>
+<p><img src="https://s1.328888.xyz/2022/08/18/3Mw3h.png"></p>
+<p>这部分代码做的便是保存寄存器现场的工作，对进程做一个snapshot，方便在中断结束后恢复。sd指令便是将寄存器的值保存到内存中一块叫trapframe的区域，不同寄存器有不同的偏移量。这样保存的好处是操作系统内核可以很方便的访问这些进程，修改他们的寄存器等。在保存寄存器现场后，程序会跳转到<code>usertrap()</code>函数的入口。</p>
+<pre><code># jump to usertrap(), which does not return
+jr t0</code></pre>
+
+<p>继续进行调试，来到函数<code>usertrap</code>的入口处，截取<code>usertrap</code>的部分代码如下：</p>
+<pre><code>void
+usertrap(void)
+{
+  &#x2F;&#x2F; ...
+  
+  struct proc *p &#x3D; myproc();
+  if(r_scause() &#x3D;&#x3D; 8){
+    &#x2F;&#x2F; system call
+
+    if(p-&gt;killed)
+      exit(-1);
+
+    &#x2F;&#x2F; sepc points to the ecall instruction,
+    &#x2F;&#x2F; but we want to return to the next instruction.
+    p-&gt;trapframe-&gt;epc +&#x3D; 4;
+
+    &#x2F;&#x2F; an interrupt will change sstatus &amp;c registers,
+    &#x2F;&#x2F; so don&#39;t enable until done with those registers.
+    intr_on();
+
+    syscall();
+  } else {
+      &#x2F;&#x2F;...
+  }
+
+  &#x2F;&#x2F;...
+  usertrapret();
+}</code></pre>
+
+<p>进入<code>usertrap</code>之后，系统还要做一些保存寄存器的工作，同时改变一些寄存器的值。之后打开中断并执行<code>syscall</code>。<code>syscall</code>的实现和xv6: lab2会放到另外一篇博客中去介绍。之后进入中断返回程序<code>usertrapret</code>。该函数除了在做完一些必要的工作之后，需要恢复寄存器现场：</p>
+<pre><code>void
+usertrapret(void) {
+  &#x2F;&#x2F; ...other works
+  &#x2F;&#x2F; jump to trampoline.S at the top of memory, which 
+  &#x2F;&#x2F; switches to the user page table, restores user registers,
+  &#x2F;&#x2F; and switches to user mode with sret.
+  uint64 fn &#x3D; TRAMPOLINE + (userret - trampoline);
+  ((void (*)(uint64,uint64))fn)(TRAPFRAME, satp);
+}</code></pre>
+
+<p>在上面的这段代码中，fn便是<code>trampoline.S</code>中<code>userret</code>函数的地址，对其进行强制类型转换为函数指针即可调用该函数。这段汇编代码执行一系列的load指令，将<code>tramframe</code>中的寄存器快照恢复到寄存器中，并执行<code>sret</code>指令，将sepc寄存器的值(0)赋给pc。</p>
+<p>所以为什么sepc的值会变成0呢？刚才我们执行了一个系统调用，a7寄存器的值为7，对应<code>sys_exec</code>，执行了一个<code>exec</code>系统调用，相当于重置了这一个进程的状态机。这个进程再继续执行时，自然要从虚拟地址为0处的指令开始执行，所以sepc的值会被提前设置为0，并被拷贝到pc中。更改sepc值的函数或是指令我没有找到，我不确定是不是<code>sret</code>指令的上一条<code>csrrw</code>更改的它的值。这个坑以后再来填。</p>
+<p>使用gdb追踪<code>sret</code>后的指令执行：</p>
+<pre><code>0x0000000000000000:  01 11   addi    sp,sp,-32
+0x0000000000000002:  06 ec   sd      ra,24(sp)
+0x0000000000000004:  22 e8   sd      s0,16(sp)
+0x0000000000000006:  26 e4   sd      s1,8(sp)
+0x0000000000000008:  4a e0   sd      s2,0(sp)
+0x000000000000000a:  00 10   addi    s0,sp,32
+0x000000000000000c:  89 45   li      a1,2
+0x000000000000000e:  17 15 00 00     auipc   a0,0x1
+0x0000000000000012:  13 05 a5 88     addi    a0,a0,-1910
+0x0000000000000016:  97 00 00 00     auipc   ra,0x0
+0x000000000000001a:  e7 80 80 39     jalr    920(ra)
+0x00000000000003ae:  bd 48   li      a7,15
+0x00000000000003b0:  73 00 00 00     ecall</code></pre>
+
+<p>这一段指令执行让我感到非常的困惑。我没有在xv6的汇编代码中没有找到上面的片段，而如果这段代码是C程序的反汇编，那么gdb应该会标识这段代码在哪一个函数中。这让我百思不得其解。ecall之后便是重复地跳转到<code>trampoline.S</code>中执行中断处理程序。</p>
+</article><ul class="pager blog-pager"><li class="next"><a href="/2022/08/16/%E5%B0%8F%E9%95%87%E5%81%9A%E9%A2%98%E5%AE%B6-%E5%BA%8F%E7%AB%A0/" data-toggle="tooltip" data-placement="top" title="小镇做题家：序章">Next Post →</a></li></ul><div id="cloud-tie-wrapper" class="cloud-tie-wrapper"></div><script src="//img1.cache.netease.com/f2e/tie/yun/sdk/loader.js"> </script><script>var cloudTieConfig = {
+  url: document.location.href, 
+  sourceId: "",
+  productKey: "64d7f0abf9224be3bfdcc6cfb9b83fcf",
+  target: "cloud-tie-wrapper"
+};</script></div></div></div><footer><div class="container beautiful-jekyll-footer"><div class="row"><div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1"><ul class="list-inline text-center footer-links"><li><a target="_blank" rel="noopener" href="https://github.com/TimeSea05" title="GitHub"><span class="fa-stack fa-lg"><i class="fa fa-circle fa-stack-2x"></i><i class="fa fa-stack-1x fa-inverse fa-github"></i></span></a></li><li><a href="mailto:anwentao1@gmail.com" title="Email me"><span class="fa-stack fa-lg"><i class="fa fa-circle fa-stack-2x"></i><i class="fa fa-stack-1x fa-inverse fa-envelope"></i></span></a></li></ul><p class="copyright text-muted">© Wentao An • 2022 • <a href="mailto:undefined"></a>
+</p><p class="theme-by text-muted">Theme by
+<a target="_blank" rel="noopener" href="https://github.com/twoyao/beautiful-hexo">beautiful-hexo</a></p></div></div></div></footer><script src="//cdn.bootcss.com/jquery/1.11.2/jquery.min.js"></script><script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><script src="/js/main.js"></script><script src="//cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script><script>hljs.initHighlightingOnLoad();</script></body></html>
