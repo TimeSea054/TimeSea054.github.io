@@ -2,7 +2,8 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.12.0/dist/katex.min.css">
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/hexo-math@4.0.0/dist/style.css">
-<!-- hexo injector head_end end --><meta name="generator" content="Hexo 6.2.0"><link rel="stylesheet" href="/css/prism-tomorrow.css" type="text/css"></head><body><nav class="navbar navbar-default navbar-fixed-top navbar-custom"><div class="container-fluid"><div class="navbar-header"><button type="button" data-toggle="collapse" data-target="#main-navbar" class="navbar-toggle"><span class="sr-only">Toggle navigation</span><span class="icon-bar"></span><span class="icon-bar"></span><span class="icon-bar"></span></button><a href="/" class="navbar-brand">Wentao' Blog</a></div><div id="main-navbar" class="collapse navbar-collapse"><ul class="nav navbar-nav navbar-right"><li><a href="/archives">Archive</a></li><li><a target="_blank" rel="noopener" href="https://github.com/TimeSea05">Github</a></li><li><a href="/about/">About</a></li></ul></div><div class="avatar-container"><div class="avatar-img-border"><a href="/"><img src="/hexo.png" class="avatar-img"></a></div></div></div></nav><header class="header-section"><div class="intro-header no-img"><div class="container"><div class="row"><div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1"><div class="post-heading"><h1>xv6:调试第一个用户进程</h1><p class="post-meta">Posted on Aug 18 2022</p></div></div></div></div></div></header><div class="container"><div class="row"><div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1"><article role="main" class="blog-post"><p>在配置好调试xv6内核调试的环境之后，便可以开始调试内核代码。</p>
+<!-- hexo injector head_end end --><meta name="generator" content="Hexo 6.2.0"><link rel="stylesheet" href="/css/prism-tomorrow.css" type="text/css"></head><body><nav class="navbar navbar-default navbar-fixed-top navbar-custom"><div class="container-fluid"><div class="navbar-header"><button type="button" data-toggle="collapse" data-target="#main-navbar" class="navbar-toggle"><span class="sr-only">Toggle navigation</span><span class="icon-bar"></span><span class="icon-bar"></span><span class="icon-bar"></span></button><a href="/" class="navbar-brand">Wentao' Blog</a></div><div id="main-navbar" class="collapse navbar-collapse"><ul class="nav navbar-nav navbar-right"><li><a href="/archives">Archive</a></li><li><a target="_blank" rel="noopener" href="https://github.com/TimeSea05">Github</a></li><li><a href="/about.html">About</a></li></ul></div><div class="avatar-container"><div class="avatar-img-border"><a href="/"><img src="/hexo.png" class="avatar-img"></a></div></div></div></nav><header class="header-section"><div class="intro-header no-img"><div class="container"><div class="row"><div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1"><div class="post-heading"><h1>xv6:调试第一个用户进程</h1><p class="post-meta">Posted on Aug 18 2022</p></div></div></div></div></div></header><div class="container"><div class="row"><div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1"><article role="main" class="blog-post"><p>本文是南京大学蒋炎岩老师操作系统课调试xv6代码的复现与扩展，相关课程参考：<a target="_blank" rel="noopener" href="https://www.bilibili.com/video/BV1DY4y1a7YD?spm_id_from=333.999.0.0">Xv6 代码导读 (调试工具配置; 调试系统调用执行)</a>.</p>
+<p>在配置好调试xv6内核调试的环境之后，便可以开始调试内核代码。关于xv6内核的调试可以参考下面这篇文章：<a target="_blank" rel="noopener" href="https://hitsz-lab.gitee.io/os-labs-2021/gdb/">https://hitsz-lab.gitee.io/os-labs-2021/gdb/</a>.</p>
 <p>调试开始时，程序在入口<code>kernel/main.c</code>处挂起。继续进行调试，内核会做一些初始化的工作，随后来到初始化第一个用户进程的函数<code>userinit()</code>：</p>
 <img src="https://s3.bmp.ovh/imgs/2022/08/18/6b573deb9dbd0ec5.png" style="zoom:67%;" />
 
@@ -80,20 +81,20 @@ Breakpoint 2 at 0x0
 <blockquote>
 <p>Here’s an outline of the most important registers:</p>
 <ul>
-<li><p><strong>stvec</strong>: The kernel writes the address of its trap handler here; the RISC-V jumps to the<br>address in stvec to handle a trap.</p>
+<li><p><strong>stvec</strong>: The kernel writes the address of its trap handler here; the RISC-V jumps to the address in stvec to handle a trap.</p>
 </li>
-<li><p><strong>sepc</strong>: When a trap occurs, RISC-V saves the program counter here (since the pc is then<br>overwritten with the value in stvec). The sret (return from trap) instruction copies sepc<br>to the pc. The kernel can write sepc to control where sret goes.</p>
+<li><p><strong>sepc</strong>: When a trap occurs, RISC-V saves the program counter here (since the pc is then overwritten with the value in stvec). The sret (return from trap) instruction copies sepc to the pc. The kernel can write sepc to control where sret goes.</p>
 </li>
 <li><p><strong>scause</strong>: RISC-V puts a number here that describes the reason for the trap.</p>
 </li>
-<li><p><strong>sscratch</strong>: The kernel places a value here that comes in handy at the very start of a trap<br>handler.</p>
+<li><p><strong>sscratch</strong>: The kernel places a value here that comes in handy at the very start of a trap handler.</p>
 </li>
-<li><p><strong>sstatus</strong>: The SIE bit in sstatus controls whether device interrupts are enabled. If the<br>kernel clears SIE, the RISC-V will defer device interrupts until the kernel sets SIE. The SPP<br>bit indicates whether a trap came from user mode or supervisor mode, and controls to what<br>mode sret returns.</p>
+<li><p><strong>sstatus</strong>: The SIE bit in sstatus controls whether device interrupts are enabled. If the kernel clears SIE, the RISC-V will defer device interrupts until the kernel sets SIE. The SPP bit indicates whether a trap came from user mode or supervisor mode, and controls to what mode sret returns.</p>
 </li>
 </ul>
-<p>When it needs to force a trap, the RISC-V hardware does the following for all trap types (other<br>than timer interrupts):</p>
+<p>When it needs to force a trap, the RISC-V hardware does the following for all trap types (other than timer interrupts):</p>
 <ol>
-<li>If the trap is a device interrupt, and the sstatus SIE bit is clear, don’t do any of the<br>following.</li>
+<li>If the trap is a device interrupt, and the sstatus SIE bit is clear, don’t do any of the following.</li>
 <li>Disable interrupts by clearing the SIE bit in <strong>sstatus</strong></li>
 <li>Copy the <strong>pc</strong> to <strong>sepc</strong>.</li>
 <li>Save the current mode (user or supervisor) in the SPP bit in <strong>sstatus</strong></li>
@@ -145,22 +146,22 @@ jr t0</code></pre>
 usertrap(void)
 {
   &#x2F;&#x2F; ...
-  
+
   struct proc *p &#x3D; myproc();
   if(r_scause() &#x3D;&#x3D; 8){
     &#x2F;&#x2F; system call
 
     if(p-&gt;killed)
       exit(-1);
-
+    
     &#x2F;&#x2F; sepc points to the ecall instruction,
     &#x2F;&#x2F; but we want to return to the next instruction.
     p-&gt;trapframe-&gt;epc +&#x3D; 4;
-
+    
     &#x2F;&#x2F; an interrupt will change sstatus &amp;c registers,
     &#x2F;&#x2F; so don&#39;t enable until done with those registers.
     intr_on();
-
+    
     syscall();
   } else {
       &#x2F;&#x2F;...
