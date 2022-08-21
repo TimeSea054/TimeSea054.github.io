@@ -3,72 +3,72 @@
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/hexo-math@4.0.0/dist/style.css">
 <!-- hexo injector head_end end --><meta name="generator" content="Hexo 6.2.0"><link rel="stylesheet" href="/css/prism-tomorrow.css" type="text/css"></head><body><nav class="navbar navbar-default navbar-fixed-top navbar-custom"><div class="container-fluid"><div class="navbar-header"><button type="button" data-toggle="collapse" data-target="#main-navbar" class="navbar-toggle"><span class="sr-only">Toggle navigation</span><span class="icon-bar"></span><span class="icon-bar"></span><span class="icon-bar"></span></button><a href="/" class="navbar-brand">Wentao' Blog</a></div><div id="main-navbar" class="collapse navbar-collapse"><ul class="nav navbar-nav navbar-right"><li><a href="/archives">Archive</a></li><li><a target="_blank" rel="noopener" href="https://github.com/TimeSea05">Github</a></li><li><a href="/about.html">About</a></li></ul></div><div class="avatar-container"><div class="avatar-img-border"><a href="/"><img src="/hexo.png" class="avatar-img"></a></div></div></div></nav><header class="header-section"><div class="intro-header no-img"><div class="container"><div class="row"><div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1"><div class="post-heading"><h1>Loop variable captured by func literal</h1><p class="post-meta">Posted on Aug 21 2022</p></div></div></div></div></div></header><div class="container"><div class="row"><div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1"><article role="main" class="blog-post"><p>这几天在学习Go语言，一段代码让我感到百思不得其解。</p>
-<pre class=" language-go"><code class="language-go"><span class="token keyword">package</span> main
+<pre><code>package main
 
-<span class="token keyword">import</span> <span class="token punctuation">(</span>
-    <span class="token string">"fmt"</span>
-    <span class="token string">"time"</span>
-<span class="token punctuation">)</span>
+import (
+    &quot;fmt&quot;
+    &quot;time&quot;
+)
 
-<span class="token keyword">type</span> field <span class="token keyword">struct</span> <span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span>
-    name <span class="token builtin">string</span>
-<span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span>
+type field struct {
+    name string
+}
 
-<span class="token keyword">func</span> <span class="token punctuation">(</span>p <span class="token operator">*</span>field<span class="token punctuation">)</span> <span class="token function">print</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span>
-    fmt<span class="token punctuation">.</span><span class="token function">Println</span><span class="token punctuation">(</span>p<span class="token punctuation">.</span>name<span class="token punctuation">)</span>
-<span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span>
+func (p *field) print() {
+    fmt.Println(p.name)
+}
 
-<span class="token keyword">func</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span>
-    data <span class="token operator">:=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>field<span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span> <span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span><span class="token string">"one"</span><span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span><span class="token string">"two"</span><span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span><span class="token string">"three"</span><span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span> <span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span>
+func main() {
+    data :&#x3D; []field{ {&quot;one&quot;}, {&quot;two&quot;}, {&quot;three&quot;} }
 
-    <span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> v <span class="token operator">:=</span> <span class="token keyword">range</span> data <span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span>
-        <span class="token keyword">go</span> v<span class="token punctuation">.</span><span class="token function">print</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
-    <span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span>
-    time<span class="token punctuation">.</span><span class="token function">Sleep</span><span class="token punctuation">(</span><span class="token number">3</span> <span class="token operator">*</span> time<span class="token punctuation">.</span>Second<span class="token punctuation">)</span>
-<span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span>
-</code></pre>
+    for _, v :&#x3D; range data {
+        go v.print()
+    }
+    time.Sleep(3 * time.Second)
+}</code></pre>
+
 <p>输出：</p>
-<pre class=" language-bash"><code class="language-bash">three
+<pre><code>three
 three
-three
-</code></pre>
+three</code></pre>
+
 <p>从表面来看，上面的代码中每循环一次创建一个协程，来打印结构体中的<code>name</code>字段。第一次循环，<code>v</code>的值为<code>&#123;&quot;one&quot;&#125;</code>，所以第一个创建的协程应该打印”one”，第二个协程应该打印”two”，以此类推。但多次运行该程序，输出结果始终只有”three”。这不太符合常理，于是我对代码进行了一些改动，在循环内部，为打印函数添加一个wrapper:</p>
-<pre class=" language-go"><code class="language-go"><span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> v <span class="token operator">:=</span> <span class="token keyword">range</span> data <span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span>
-    <span class="token keyword">go</span> <span class="token keyword">func</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span>
-        v<span class="token punctuation">.</span><span class="token function">print</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
-    <span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
-<span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span>
-</code></pre>
+<pre><code>for _, v :&#x3D; range data {
+    go func() {
+        v.print()
+    }()
+}</code></pre>
+
 <p>输出结果还是相同，但此时编译器发出了警告：</p>
-<pre class=" language-bash"><code class="language-bash">loop variable <span class="token function">v</span> captured by func literal
-</code></pre>
+<pre><code>loop variable v captured by func literal</code></pre>
+
 <p>这句警告是什么意思我也没有搞懂。我想用其他的办法找出这个bug的源头。添加<code>--race</code>选项运行该程序，得到的结果如下：</p>
-<pre class=" language-bash"><code class="language-bash">WARNING: DATA RACE
+<pre><code>WARNING: DATA RACE
 Read at 0x00c00011a210 by goroutine 7:
-  main.main.func1<span class="token punctuation">(</span><span class="token punctuation">)</span>
-      /home/avalanche/dev/go/go-learn/main.go:18 +0x3a
+  main.main.func1()
+      &#x2F;home&#x2F;avalanche&#x2F;dev&#x2F;go&#x2F;go-learn&#x2F;main.go:18 +0x3a
 
-Previous <span class="token function">write</span> at 0x00c00011a210 by main goroutine:
-  main.main<span class="token punctuation">(</span><span class="token punctuation">)</span>
-      /home/avalanche/dev/go/go-learn/main.go:16 +0xd3
+Previous write at 0x00c00011a210 by main goroutine:
+  main.main()
+      &#x2F;home&#x2F;avalanche&#x2F;dev&#x2F;go&#x2F;go-learn&#x2F;main.go:16 +0xd3
 
-Goroutine 7 <span class="token punctuation">(</span>running<span class="token punctuation">)</span> created at:
-  main.main<span class="token punctuation">(</span><span class="token punctuation">)</span>
-      /home/avalanche/dev/go/go-learn/main.go:17 +0x164
-</code></pre>
+Goroutine 7 (running) created at:
+  main.main()
+      &#x2F;home&#x2F;avalanche&#x2F;dev&#x2F;go&#x2F;go-learn&#x2F;main.go:17 +0x164</code></pre>
+
 <p>确实发生了数据竞争，但内存地址为0x00c00011a210处是哪一个变量无从知晓，猜测是<code>v</code>。但从数据竞争也无法从逻辑上推出程序的运行结果，作罢，求助于Google，找到了Stack Overflow上的一个<a target="_blank" rel="noopener" href="https://stackoverflow.com/questions/21822527/why-golang-dont-iterate-correctly-in-my-for-loop-with-range">帖子</a>。</p>
 <p>高赞给出的解释是这样的：在循环中创建的这些goroutine中，<code>v</code>指向<code>for...range</code>循环中的循环变量<code>v</code>，也就是说，在这些goroutine运行的时候，v的值是<code>for...range</code>循环中的v，而不是这些goroutine创建时v的值。线程<code>main</code>的运行速度很快，在这些goroutine还没有运行起来的时候，循环遍历已经完成，所以在这些goroutine运行时，协程中的v全部指向最后一个循环变量，在这个例子中就是<code>&#123;&quot;three&quot;&#125;</code>。如果想要达到不同的线程输出不同值的效果，就要用传参的方式来创建这些goroutine：</p>
-<pre class=" language-go"><code class="language-go"><span class="token keyword">for</span> <span class="token boolean">_</span><span class="token punctuation">,</span> v <span class="token operator">:=</span> <span class="token keyword">range</span> data <span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span>
-    <span class="token keyword">go</span> <span class="token keyword">func</span><span class="token punctuation">(</span>v field<span class="token punctuation">)</span> <span class="token operator">&amp;</span>#<span class="token number">123</span><span class="token punctuation">;</span>
-        v<span class="token punctuation">.</span><span class="token function">print</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
-    <span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span><span class="token punctuation">(</span>v<span class="token punctuation">)</span>
-<span class="token operator">&amp;</span>#<span class="token number">125</span><span class="token punctuation">;</span>
-</code></pre>
+<pre><code>for _, v :&#x3D; range data {
+	go func(v field) {
+		v.print()
+	}(v)
+}</code></pre>
+
 <p>此时程序的输出结果为：</p>
-<pre class=" language-bash"><code class="language-bash">three
+<pre><code>three
 one
-two
-</code></pre>
+two</code></pre>
+
 <p>而且多运行几次，每一次运行的结果都有可能不同。</p>
 </article><ul class="pager blog-pager"><li class="next"><a href="/2022/08/19/%E7%8E%89%E6%B3%89%E8%B7%AF-%E4%B8%80%E8%B7%AF%E5%90%91%E5%8C%97/" data-toggle="tooltip" data-placement="top" title="玉泉路：一路向北">Next Post →</a></li></ul><div id="cloud-tie-wrapper" class="cloud-tie-wrapper"></div><script src="//img1.cache.netease.com/f2e/tie/yun/sdk/loader.js"> </script><script>var cloudTieConfig = {
   url: document.location.href, 
